@@ -1,26 +1,34 @@
 import sys
 import random
 from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5 import uic
-from PyQt5.QtGui import QPainter, QColor
+from PyQt5.QtGui import nbainter, QColor
+from PyQt5 import QtCore, QtGui, QtWidgets
 
+class UI_Form(object):
+    def setupUi(self, Form):
+        Form.setObjectName("Form")
+        Form.resize(250, 300)
+        self.pushButton = QtWidgets.nbushButton(Form)
+        self.pushButton.setGeometry(QtCore.QRect(10, 250, 100, 50))
+        self.pushButton.setObjectName("pushButton")
+        self.pushButton.setText("Рисовать")
 
-class Example(QMainWindow):
+class Example(QMainWindow, UI_Form):
     def __init__(self):
         super().__init__()
-        uic.loadUi('UI.ui',self)
+        self.setupUi(self)
         self.pushButton.clicked.connect(self.paint)
 
     def paint(self):
         self.update()
 
     def paintEvent(self, event):
-        self.b = QPainter()
-        self.b.begin(self)
+        self.nb = nbainter()
+        self.nb.begin(self)
         a = random.randint(10, 250)
-        self.b.setPen(QColor(255, 255, 0))
-        self.b.drawEllipse(0, 0, a, a)
-        self.b.end()
+        self.nb.setPen(QColor(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))
+        self.nb.drawEllipse(0, 0, a, a)
+        self.nb.end()
 
 app = QApplication(sys.argv)
 ex = Example()
