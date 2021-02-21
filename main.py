@@ -1,333 +1,339 @@
-import sys,os,pygame,random,math
+import pygame, random, math, sys, copy, time
+from pygame.locals import *
 
-pygame.init()
-pygame.display.set_caption("nsnake v1.0")
-pygame.font.init()
-random.seed()
-
-#Global constant definitions
-SPEED = 0.36
-SNAKE_SIZE = 9
-APPLE_SIZE = SNAKE_SIZE
-SEPARATION = 10
-SCREEN_HEIGHT = 600
-SCREEN_WIDTH = 800
-FPS = 25
-KEY = {"UP":1,"DOWN":2,"LEFT":3,"RIGHT":4}
-#Screen initialization
-screen = pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT),pygame.HWSURFACE)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
 
 
-#Resources
-score_font = pygame.font.Font("arial.ttf",29)
-score_numb_font = pygame.font.Font("arial.ttf",19)
-score_msg = score_font.render("Score:",1,pygame.Color("green"))
-score_msg_size = score_font.size("Score")
-icon = pygame.image.load("nsnake32.png")
-pygame.display.set_icon(icon)
+class Board:
+    def __init__(self, game, copied=False):
+        self.board = [['.', '.', '.', '.'],
+                      ['.', '.', '.', '.'],
+                      ['.', '.', '.', '.'],
+                      ['.', '.', '.', '.']]
+        self.board[random.randint(0, 3)][random.randint(0, 3)] = 2
+        self.game = game
+        self.copied = copied
 
-background_color = pygame.Color(74,74,74)
-black = pygame.Color(0,0,0)
+    def get_empty(self):
+        empty = []
+        for i in range(4):
+            for j in range(4):
+                if self.board[i][j] == '.':
+                    empty.append((i, j))
+        return empty
 
-#Clock
-gameClock = pygame.time.Clock()
+    def create_random(self):
+        empty = self.get_empty()
+        if empty:
+            i, j = random.choice(empty)
+            value = random.choice([2] * 9 + [4])
+            self.board[i][j] = value
 
-
-def checkCollision(posA,As,posB,Bs):
-    #As size of a | Bs size of B
-    if(posA.x   < posB.x+Bs and posA.x+As > posB.x and posA.y < posB.y + Bs and posA.y+As > posB.y):
+    def is_full(self):
+        for row in self.board:
+            for cell in row:
+                if cell == '.':
+                    return False
         return True
-    return False
 
-def checkLimits(entity):
-    if(entity.x > SCREEN_WIDTH):
-        entity.x = SNAKE_SIZE
-    if(entity.x < 0):
-        entity.x = SCREEN_WIDTH - SNAKE_SIZE
-    if(entity.y > SCREEN_HEIGHT):
-        entity.y = SNAKE_SIZE
-    if(entity.y < 0):
-        entity.y = SCREEN_HEIGHT - SNAKE_SIZE
+    def no_moves(self):
+        for move in range(4):
+            new_board = Board(game, True)
+            new_board.board = copy.deepcopy(self.board)
+            move_list = [new_board.up, new_board.down, new_board.left, new_board.right]
+            move_list[move]()
+            if new_board.board != self.board:
+                return False
+        return True
 
-class Apple:
-    def __init__(self,x,y,state):
-        self.x = x
-        self.y = y
-        self.state = state
-        self.color = pygame.color.Color("red")
-    def draw(self,screen):
-        pygame.draw.rect(screen,self.color,(self.x,self.y,APPLE_SIZE,APPLE_SIZE),0)
+    def up(self):
+        score = 0
+        can_combine = [True, True, True, True]
+        move_count = -1
 
-class Segment:
-    def __init__(self,x,y):
-        self.x = x
-        self.y = y
-        self.direction = KEY["UP"]
-        self.color = "white"
+        for j in range(4):
+            if '.' not in [self.board[i][j] for i in range(4)] and \
+                    self.board[0][j] == self.board[1][j] and \
+                    self.board[2][j] == self.board[3][j]:
+                self.board[0][j] *= 2
+                self.board[1][j] = self.board[2][j] * 2
+                self.board[2][j] = '.'
+                self.board[3][j] = '.'
+                can_combine[j] = False
+                score += self.board[0][j] + self.board[1][j]
+                if not self.copied:
+                    self.game.draw()
 
-class Snake:
-    def __init__(self,x,y):
-        self.x = x
-        self.y = y
-        self.direction = KEY["UP"]
-        self.stack = []
+        while move_count != 0:
+            move_count = 0
+            for i in range(1, 4):
+                for j in range(4):
+                    if self.board[i][j] != '.':
 
-        self.stack.append(self)
+                        if self.board[i - 1][j] == '.':
+                            self.board[i][j], self.board[i - 1][j] = self.board[i - 1][j], self.board[i][j]
+                            move_count += 1
 
-        blackBox = Segment(self.x,self.y + SEPARATION)
-        blackBox.direction = KEY["UP"]
-        blackBox.color = "NULL"
-        self.stack.append(blackBox)
+                        elif self.board[i - 1][j] == self.board[i][j] and can_combine[j]:
+                            self.board[i - 1][j] *= 2
+                            self.board[i][j] = '.'
+                            can_combine[j] = False
+                            score += self.board[i - 1][j]
+                            move_count += 1
+                if not self.copied:
+                    self.game.draw()
+        return score
+
+    def left(self):
+        score = 0
+        can_combine = [True, True, True, True]
+        move_count = -1
+
+        for i in range(4):
+            if '.' not in [self.board[i][j] for j in range(4)] and \
+                    self.board[i][0] == self.board[i][1] and \
+                    self.board[i][2] == self.board[i][3]:
+                self.board[i][0] *= 2
+                self.board[i][1] = self.board[i][2] * 2
+                self.board[i][2] = '.'
+                self.board[i][3] = '.'
+                can_combine[i] = False
+                score += self.board[i][0] + self.board[i][1]
+                if not self.copied:
+                    self.game.draw()
+
+        while move_count != 0:
+            move_count = 0
+            for j in range(1, 4):
+                for i in range(4):
+                    if self.board[i][j] != '.':
+                        if self.board[i][j - 1] == '.':
+                            self.board[i][j], self.board[i][j - 1] = self.board[i][j - 1], self.board[i][j]
+                            move_count += 1
+                        elif self.board[i][j - 1] == self.board[i][j] and can_combine[i]:
+                            self.board[i][j - 1] *= 2
+                            self.board[i][j] = '.'
+                            can_combine[i] = False
+                            score += self.board[i][j - 1]
+                            move_count += 1
+                if not self.copied:
+                    self.game.draw()
+        return score
+
+    def down(self):
+        can_combine = [True, True, True, True]
+        score = 0
+        move_count = -1
+        for j in range(4):
+            if '.' not in [self.board[i][j] for i in range(4)] and \
+                    self.board[0][j] == self.board[1][j] and \
+                    self.board[2][j] == self.board[3][j]:
+                self.board[3][j] *= 2
+                self.board[2][j] = self.board[1][j] * 2
+                self.board[1][j] = '.'
+                self.board[0][j] = '.'
+                can_combine[j] = False
+                score += self.board[3][j] + self.board[2][j]
+                if not self.copied:
+                    self.game.draw()
+
+        while move_count != 0:
+            move_count = 0
+            for i in [2, 1, 0]:
+                for j in range(4):
+                    if self.board[i][j] != '.':
+                        if self.board[i + 1][j] == '.':
+                            self.board[i][j], self.board[i + 1][j] = self.board[i + 1][j], self.board[i][j]
+                            move_count += 1
+                        elif self.board[i + 1][j] == self.board[i][j] and can_combine[j]:
+                            self.board[i + 1][j] *= 2
+                            self.board[i][j] = '.'
+                            can_combine[j] = False
+                            score += self.board[i + 1][j]
+                            move_count += 1
+                if not self.copied:
+                    self.game.draw()
+        return score
+
+    def right(self):
+        can_combine = [True, True, True, True]
+        score = 0
+        move_count = -1
+        for i in range(4):
+            if '.' not in [self.board[i][j] for j in range(4)] and \
+                    self.board[i][0] == self.board[i][1] and \
+                    self.board[i][2] == self.board[i][3]:
+                self.board[i][3] *= 2
+                self.board[i][2] = self.board[i][1] * 2
+                self.board[i][1] = '.'
+                self.board[i][0] = '.'
+                can_combine[i] = False
+                score += self.board[i][3] + self.board[i][2]
+                if not self.copied:
+                    self.game.draw()
+
+        while move_count != 0:
+            move_count = 0
+            for j in [2, 1, 0]:
+                for i in range(4):
+                    if self.board[i][j] != '.':
+                        if self.board[i][j + 1] == '.':
+                            self.board[i][j], self.board[i][j + 1] = self.board[i][j + 1], self.board[i][j]
+                            move_count += 1
+                        elif self.board[i][j + 1] == self.board[i][j] and can_combine[i]:
+                            self.board[i][j + 1] *= 2
+                            self.board[i][j] = '.'
+                            can_combine[i] = False
+                            score += self.board[i][j + 1]
+                            move_count += 1
+                if not self.copied:
+                    self.game.draw()
+        return score
+
+    def __str__(self):
+        string = ''
+        for row in self.board:
+            for cell in row:
+                string += str(cell)
+                if len(str(cell)) == 1:
+                    string += '   '
+                elif len(str(cell)) == 2:
+                    string += '  '
+                elif len(str(cell)) == 3:
+                    string += ' '
+
+            string += '\n'
+        return string.strip()
 
 
+class Cell(pygame.sprite.Sprite):
+    colors = {'.': 'orange', 2: 'green', 4: 'deepskyblue', 8: 'red', 16: 'cornsilk', 32: 'blue', 64: 'gray60',
+              128: 'hotpink', 256: 'khaki4', 512: 'olivedrab1', 1024: 'plum4', 2048: 'turquoise4', 4096: 'gold'}
 
-    def move(self):
-        last_element = len(self.stack)-1
-        while(last_element != 0):
-            self.stack[last_element].direction = self.stack[last_element-1].direction
-            self.stack[last_element].x = self.stack[last_element-1].x
-            self.stack[last_element].y = self.stack[last_element-1].y
-            last_element-=1
-        if(len(self.stack)<2):
-            last_segment = self
-        else:
-            last_segment = self.stack.pop(last_element)
-        last_segment.direction = self.stack[0].direction
-        if(self.stack[0].direction ==KEY["UP"]):
-            last_segment.y = self.stack[0].y - (SPEED * FPS)
-        elif(self.stack[0].direction == KEY["DOWN"]):
-            last_segment.y = self.stack[0].y + (SPEED * FPS)
-        elif(self.stack[0].direction ==KEY["LEFT"]):
-            last_segment.x = self.stack[0].x - (SPEED * FPS)
-        elif(self.stack[0].direction == KEY["RIGHT"]):
-            last_segment.x = self.stack[0].x + (SPEED * FPS)
-        self.stack.insert(0,last_segment)
+    def __init__(self, pos, width=100, height=100, value=2):
+        myFont = pygame.font.Font('freesansbold.ttf', 48)
+        pygame.sprite.Sprite.__init__(self)
+        self.width = width
+        self.height = height
+        self.value = value
+        self.rect = Rect(0, 0, self.width, self.height)
+        self.rect.center = pos
+        self.image = pygame.Surface(self.rect.size)
+        self.image.fill(Color(self.colors[self.value]))
 
-    def getHead(self):
-        return(self.stack[0])
+        self.label = myFont.render(str(self.value), 1, BLACK)
+        self.labelrect = self.label.get_rect()
+        self.imagerect = self.image.get_rect()
+        self.labelrect.center = self.imagerect.center
+        if self.value != '.':
+            self.image.blit(self.label, self.labelrect)
 
-    def grow(self):
-        last_element = len(self.stack)-1
-        self.stack[last_element].direction = self.stack[last_element].direction
-        if(self.stack[last_element].direction == KEY["UP"]):
-            newSegment = Segment(self.stack[last_element].x,self.stack[last_element].y-SNAKE_SIZE)
-            blackBox = Segment(newSegment.x,newSegment.y-SEPARATION)
-
-        elif(self.stack[last_element].direction == KEY["DOWN"]):
-            newSegment = Segment(self.stack[last_element].x,self.stack[last_element].y+SNAKE_SIZE)
-            blackBox = Segment(newSegment.x,newSegment.y+SEPARATION)
-
-        elif(self.stack[last_element].direction == KEY["LEFT"]):
-            newSegment = Segment(self.stack[last_element].x-SNAKE_SIZE,self.stack[last_element].y)
-            blackBox = Segment(newSegment.x-SEPARATION,newSegment.y)
-
-        elif(self.stack[last_element].direction == KEY["RIGHT"]):
-            newSegment = Segment(self.stack[last_element].x+SNAKE_SIZE,self.stack[last_element].y)
-            blackBox = Segment(newSegment.x+SEPARATION,newSegment.y)
-
-        blackBox.color = "NULL"
-        self.stack.append(newSegment)
-        self.stack.append(blackBox)
-
-    def iterateSegments(self,delta):
+    def update(self, direction):
         pass
 
-    def setDirection(self,direction):
-        if(self.direction == KEY["RIGHT"] and direction == KEY["LEFT"] or self.direction == KEY["LEFT"] and direction == KEY["RIGHT"]):
-            pass
-        elif(self.direction == KEY["UP"] and direction == KEY["DOWN"] or self.direction == KEY["DOWN"] and direction == KEY["UP"]):
-            pass
+
+class GameMain():
+    done = False
+    color_bg = Color('gray30')
+
+    def __init__(self, width=550, height=550, high_score=0):
+        pygame.init()
+        self.game_over = False
+        self.font = pygame.font.Font('freesansbold.ttf', 24)
+        self.width, self.height = width, height
+        self.screen = pygame.display.set_mode((self.width, self.height))
+        self.clock = pygame.time.Clock()
+        self.board = Board(self)
+        self.score = 0
+        try:
+            if high_score == 0:
+                with open("high_score.txt", "rb") as f:
+                    self.high_score = int(f.read().strip())
+        except:
+            self.high_score = high_score
+
+    def draw_board(self):
+        self.cells = pygame.sprite.Group()
+
+        cur_x, cur_y = 100, 100
+        for row in self.board.board:
+            for square in row:
+                new_cell = Cell((cur_x, cur_y), value=square)
+                self.cells.add(new_cell)
+                cur_x += 110
+            cur_y += 110
+            cur_x = 100
+        self.cells.draw(self.screen)
+
+    def main_loop(self):
+        while not self.done:
+            self.handle_events()
+
+            if self.score > self.high_score:
+                self.high_score = self.score
+
+            self.draw()
+            self.clock.tick(30)
+            if self.board.no_moves():
+                self.game_over = True
+                self.end_screen = pygame.Surface((500, 500))
+                self.end_screen_rect = self.end_screen.get_rect()
+                # self.done = True
+        with open("high_score.txt", 'wb') as f:
+            f.write(str(self.high_score))
+        pygame.quit()
+        sys.exit()
+
+    def draw(self):
+        self.screen.fill(self.color_bg)
+        if self.game_over:
+            self.game_over_label1 = self.font.render("Game Over", 1, WHITE)
+            self.game_over_label2 = self.font.render("Final Score: %d" % (self.score), 1, WHITE)
+            self.game_over_label3 = self.font.render("Press Space Bar to Play Again", 1, WHITE)
+            self.end_screen.blit(self.game_over_label1, (175, 50))
+            self.end_screen.blit(self.game_over_label2, (150, 100))
+            self.end_screen.blit(self.game_over_label3, (75, 470))
+            self.screen.blit(self.end_screen, (25, 25))
         else:
-            self.direction = direction
-
-    def get_rect(self):
-        rect = (self.x,self.y)
-        return rect
-
-    def getX(self):
-        return self.x
-
-    def getY(self):
-        return self.y
-
-    def setX(self,x):
-        self.x = x
-
-    def setY(self,y):
-        self.y = y
-
-    def checkCrash(self):
-        counter = 1
-        while(counter < len(self.stack)-1):
-            if(checkCollision(self.stack[0],SNAKE_SIZE,self.stack[counter],SNAKE_SIZE)and self.stack[counter].color != "NULL"):
-                return True
-            counter+=1
-        return False
-
-    def draw(self,screen):
-        pygame.draw.rect(screen,pygame.color.Color("yellow"),(self.stack[0].x,self.stack[0].y,SNAKE_SIZE,SNAKE_SIZE),0)
-        counter = 1
-        while(counter < len(self.stack)):
-            if(self.stack[counter].color == "NULL"):
-                counter+=1
-                continue
-            pygame.draw.rect(screen,pygame.color.Color("white"),(self.stack[counter].x,self.stack[counter].y,SNAKE_SIZE,SNAKE_SIZE),0)
-            counter+=1
-
-
-def getKey():
-        for event in pygame.event.get():
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    return KEY["UP"]
-                elif event.key == pygame.K_DOWN:
-                    return KEY["DOWN"]
-                elif event.key == pygame.K_LEFT:
-                    return KEY["LEFT"]
-                elif event.key == pygame.K_RIGHT:
-                    return KEY["RIGHT"]
-                elif event.key == pygame.K_ESCAPE:
-                    return "exit"
-                elif event.key == pygame.K_y:
-                    return "yes"
-                elif event.key == pygame.K_n:
-                    return "no"
-            if event.type == pygame.QUIT:
-                sys.exit()
-
-def respawnApple(apples,index,sx,sy):
-    radius = math.sqrt((SCREEN_WIDTH/2*SCREEN_WIDTH/2  + SCREEN_HEIGHT/2*SCREEN_HEIGHT/2))/2
-    angle = 999
-    while(angle > radius):
-        angle = random.uniform(0,800)*math.pi*2
-        x = SCREEN_WIDTH/2 + radius * math.cos(angle)
-        y = SCREEN_HEIGHT/2 + radius * math.sin(angle)
-        if(x == sx and y == sy):
-            continue
-    newApple = Apple(x,y,1)
-    apples[index] = newApple
-
-def respawnApples(apples,quantity,sx,sy):
-    counter = 0
-    del apples[:]
-    radius = math.sqrt((SCREEN_WIDTH/2*SCREEN_WIDTH/2  + SCREEN_HEIGHT/2*SCREEN_HEIGHT/2))/2
-    angle = 999
-    while(counter < quantity):
-        while(angle > radius):
-            angle = random.uniform(0,800)*math.pi*2
-            x = SCREEN_WIDTH/2 + radius * math.cos(angle)
-            y = SCREEN_HEIGHT/2 + radius * math.sin(angle)
-            if( (x-APPLE_SIZE == sx or x+APPLE_SIZE == sx) and (y-APPLE_SIZE == sy or y+APPLE_SIZE == sy) or radius - angle <= 10):
-                continue
-        apples.append(Apple(x,y,1))
-        angle = 999
-        counter+=1
-
-def endGame():
-    game_over_font = pygame.font.Font("arial.ttf",46)
-    play_again_font = pygame.font.Font("arial.ttf",22)
-    message = game_over_font.render("Game Over",1,pygame.Color("white"))
-    message_play_again = play_again_font.render("Play Again? Y/N",1,pygame.Color("green"))
-    screen.blit(message,(280,240))
-    screen.blit(message_play_again,(280+45,240+45))
-    pygame.display.flip()
-    pygame.display.update()
-    myKey = getKey()
-    while(myKey != "exit"):
-        if(myKey == "yes"):
-            main()
-        elif(myKey == "no"):
-            break
-        myKey = getKey()
-        gameClock.tick(FPS)
-    sys.exit()
-
-def drawScore(score):
-    score_numb = score_numb_font.render(str(score),1,pygame.Color("red"))
-    screen.blit(score_msg, (SCREEN_WIDTH-score_msg_size[0]-60,4) )
-    screen.blit(score_numb,(SCREEN_WIDTH - 48,12))
-
-def drawGameTime(gameTime):
-    game_time = score_font.render("Time:",1,pygame.Color("green"))
-    game_time_numb = score_numb_font.render(str(gameTime/1000),1,pygame.Color("red"))
-    screen.blit(game_time,(30,4))
-    screen.blit(game_time_numb,(109,12))
-
-def exitScreen():
-    pass
-
-def main():
-    score = 0
-
-    #Snake initialization
-    mySnake = Snake(SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
-    mySnake.setDirection(KEY["UP"])
-    mySnake.move()
-    start_segments=3
-    while(start_segments>0):
-        mySnake.grow()
-        mySnake.move()
-        start_segments-=1
-
-    #Apples
-    max_apples = 1
-    eaten_apples = 0
-    current_apples = 1
-    apples = [Apple(random.randint(60,SCREEN_WIDTH),random.randint(60,SCREEN_HEIGHT),1)]
-    respawnApples(apples,max_apples,mySnake.x,mySnake.y)
-
-    startTime = pygame.time.get_ticks()
-    endgame = 0
-    while(endgame!=1):
-
-
-        gameClock.tick(FPS)
-
-        #Input
-        keyPress = getKey()
-        if keyPress == "exit":
-            endgame = 1
-
-        #Collision check
-        checkLimits(mySnake)
-        if(mySnake.checkCrash()== True):
-            endGame()
-        for myApple in apples:
-            if(myApple.state == 1):
-                if(checkCollision(mySnake.getHead(),SNAKE_SIZE,myApple,APPLE_SIZE)==True):
-                    mySnake.grow()
-                    myApple.state = 0
-                    score+=5
-                    eaten_apples+=1
-            else:
-                current_apples+=1
-
-        #Position Update
-        if(keyPress):
-            mySnake.setDirection(keyPress)
-        mySnake.move()
-
-
-
-        #Respawning apples
-        if(eaten_apples > 0):
-            eaten_apples = 0
-            respawnApple(apples,0,mySnake.getHead().x,mySnake.getHead().y)
-
-        #Drawing
-        screen.fill(background_color)
-        for myApple in apples:
-            if(myApple.state == 1):
-                myApple.draw(screen)
-
-        mySnake.draw(screen)
-        drawScore(score)
-        gameTime = pygame.time.get_ticks() - startTime
-        drawGameTime(gameTime)
-        pygame.display.flip()
+            self.draw_board()
+            self.score_label = self.font.render("Score: %d" % (self.score), 1, WHITE)
+            self.screen.blit(self.score_label, (50, 10))
+            self.hiscore_label = self.font.render("High Score: %d" % (self.high_score), 1, WHITE)
+            self.screen.blit(self.hiscore_label, (320, 10))
         pygame.display.update()
 
+    def handle_events(self):
+        events = pygame.event.get()
+
+        # ключи
+        keys = pygame.key.get_pressed()
+
+        # события
+        for event in events:
+            if event.type == pygame.QUIT:
+                self.done = True
+            elif event.type == KEYDOWN and not self.game_over:
+                if event.key == K_ESCAPE:
+                    self.done = True
+                elif event.key in [K_UP, K_DOWN, K_LEFT, K_RIGHT]:
+                    self.current_board = copy.deepcopy(self.board.board)
+                    if event.key == K_UP:
+                        self.score += self.board.up()
+                    elif event.key == K_DOWN:
+                        self.score += self.board.down()
+                    elif event.key == K_LEFT:
+                        self.score += self.board.left()
+                    elif event.key == K_RIGHT:
+                        self.score += self.board.right()
+
+                    if self.current_board != self.board.board:
+                        self.board.create_random()
+            elif event.type == KEYDOWN and self.game_over:
+                if event.key == K_SPACE:
+                    self.__init__(high_score=self.high_score)
 
 
-
-main()
+if __name__ == "__main__":
+    game = GameMain()
+    game.main_loop()
