@@ -306,7 +306,7 @@ class GameMain():
     def handle_events(self):
         events = pygame.event.get()
 
-        # ключи
+        # ключи1
         keys = pygame.key.get_pressed()
 
         # события
